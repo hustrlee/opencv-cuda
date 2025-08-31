@@ -7,13 +7,13 @@
 
 ## 1. 背景与动机 (Motivation)
 
-很多人使用 OpenCV 时只依赖 CPU 版本，但在处理高清视频流、大规模图像预处理、或需要和深度学习推理流水线结合时，CPU 很容易成为瓶颈。启用 **OpenCV 的 CUDA 模块** 可以充分利用 GPU 的并行计算能力，大幅提升性能，同时减少 CPU 占用。  
+在处理高清视频流、大规模图像预处理、或需要和深度学习推理流水线结合时，CPU 很容易成为瓶颈。启用 **OpenCV 的 CUDA 模块** 可以充分利用 GPU 的并行计算能力，大幅提升性能，同时减少 CPU 占用。  
 
-然而，编译带 CUDA 支持的 OpenCV 并不简单，主要难点包括：
+编译带 CUDA 支持的 OpenCV 主要难点包括：
 
 - **依赖复杂**：需要同时匹配 CUDA Toolkit、cuDNN、NVIDIA 驱动、FFmpeg/GStreamer 等库，任一版本不符都可能导致失败。
 - **系统兼容性**：生成的 `cv2.so` 会绑定构建时的 `glibc`、`libstdc++`、FFmpeg SONAME 等，如果目标机环境不一致，就会出现 `undefined symbol` 或缺少库文件错误。
-- **编译耗时与参数复杂**：完整编译 OpenCV（含 contrib + CUDA + 多媒体支持）可能耗时很久，还需要精确设置 CMake 参数（CUDA 架构、模块开关、RPATH 等）。
+- **编译参数复杂**：完整编译 OpenCV（含 contrib + CUDA + 多媒体支持）需要精确设置 CMake 参数（CUDA 架构、模块开关、RPATH 等）。
 - **Python ABI 问题**：若不使用 `abi3`，每个 Python 版本都要单独编译 wheel，维护负担很重。
 
 为了解决这些问题，本仓库提供了一种 **在 Docker 中编译 OpenCV + CUDA 并产出 Python wheel** 的方法。
@@ -82,6 +82,7 @@ git checkout 88
 
 ```bash
 docker cp opencv-python/ cvcuda:/opencv-python/
+chown -R root:root opencv-python/
 ```
 
 ### 下载 Video Codec SDK Header Files
@@ -100,35 +101,72 @@ docker cp opencv-python/ cvcuda:/opencv-python/
 ln -s /video_codec_interface/Interface/cuviddec.h /usr/local/cuda/include/cuviddec.h
 ln -s /video_codec_interface/Interface/nvcuvid.h /usr/local/cuda/include/nvcuvid.h
 ln -s /video_codec_interface/Interface/nvEncodeAPI.h /usr/local/cuda/include/nvEncodeAPI.h
+ln -s /usr/lib/x86_64-linux-gnu/libnvcuvid.so.1 /usr/lib/x86_64-linux-gnu/libnvcuvid.so
+ln -s /usr/lib/x86_64-linux-gnu/libnvidia-encode.so.1 /usr/lib/x86_64-linux-gnu/libnvidia-encode.so
 ```
 
 > 这里假设将 sdk 拷贝到容器内的 `/video_codec_interface` 目录中。
 
 ## 准备编译环境
 
+```bash
+sed -i "s|archive.ubuntu.com|mirrors.tuna.tsinghua.edu.cn|g" /etc/apt/sources.list.d/ubuntu.sources
+```
+
 ### 安装系统工具及编译工具链
 
 ```bash
 apt update && DEBIAN_FRONTEND=noninteractive apt install -y \
-    curl wget vim build-essential cmake ninja-build git \ 
-    pkg-config ca-certificates software-properties-common
+    curl wget vim build-essential cmake ninja-build git \
+    pkg-config ca-certificates
+```
+
+### 安装 ffmpeg 库文件
+
+```bash
+apt install -y libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libx264-dev
 ```
 
 ### 安装 Conda
 
 ```bash
-wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+# wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+wget https://mirrors.tuna.tsinghua.edu.cn/anaconda/miniconda/Miniconda3-latest-Linux-x86_64.sh
 bash ~/Miniconda3-latest-Linux-x86_64.sh
 source ~/.bashrc
+cat <<EOF > ~/.condarc
+channels:
+  - defaults
+show_channel_urls: true
+default_channels:
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/msys2
+custom_channels:
+  conda-forge: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+  pytorch: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
+EOF
 ```
 
 ### 创建编译虚拟环境
 
 ```bash
-conda create -n opencv-cuda python=3.9 numpy
-conda install -c conda-forge \
-      pkg-config ffmpeg=7 \
+conda create -n opencv-cuda python=3.9
+conda activate opencv-cuda
+conda install -c conda-forge pkg-config openblas lapack eigen tbb \
       libjpeg-turbo libpng libtiff libwebp openexr libavif \
-      openblas lapack eigen \
-      tbb
+      patchelf
+pip config set global.index-url https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple
+pip install -U pip setuptools wheel scikit-build ninja auditwheel numpy
+```
+
+## 编译
+
+### 设置编译参数
+
+```bash
+export https_proxy=http://proxy.home:1081
+export ENABLE_CONTRIB=1
+export ENABLE_HEADLESS=1
+export CMAKE_ARGS="-DCMAKE_BUILD_TYPE=RELEASE -DWITH_CUDA=ON -DCUDA_ARCH_BIN=7.5;8.6;8.9 -DOPENCV_DNN_CUDA=ON -DWITH_FFMPEG=ON"
 ```
