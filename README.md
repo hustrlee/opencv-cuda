@@ -205,6 +205,37 @@ conda activate cv
 pip install opencv_contrib_python_headless-4.12.0.88-cp39-cp39-manylinux_2_38_x86_64.whl
 ```
 
+### 5.1 简单测试
+
+`test_opencv.py`：
+
+```python
+import cv2 as cv
+print("cudacodec?", hasattr(cv, "cudacodec"))
+
+try:
+    dec = cv.cudacodec.createVideoReader("dummy.mp4")
+    ok, gpu_frame = dec.nextFrame()
+    print("cudacodec first frame:", ok, type(gpu_frame))
+except Exception as e:
+    print("cudacodec error:", e)
+
+cap = cv.VideoCapture("test.mp4", cv.CAP_FFMPEG)
+print("FFmpeg cap opened:", cap.isOpened())
+cap.set(cv.CAP_PROP_HW_ACCELERATION, cv.VIDEO_ACCELERATION_ANY)
+print("HW accel set?", cap.get(cv.CAP_PROP_HW_ACCELERATION))
+```
+
+将 `dummy.mp4` 替换为真实的视频文件名。运行后，应该看到下面的输出：
+
+```bash
+$ python test_opencv.py
+cudacodec? True
+cudacodec first frame: True <class 'cv2.cuda.GpuMat'>
+FFmpeg cap opened: True
+HW accel set? 0.0
+```
+
 ## 6. 补充说明
 
 ### 6.1 关于 FFMPEG
