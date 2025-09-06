@@ -135,7 +135,7 @@ export CMAKE_ARGS="
 -DWITH_VA_INTEL=OFF
 -DWITH_V4L=OFF
 -DCMAKE_PREFIX_PATH=$CONDA_PREFIX
--DCMAKE_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/lib/wsl/lib
+-DCMAKE_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu
 -DCMAKE_SYSROOT=$CONDA_PREFIX/x86_64-conda-linux-gnu/sysroot
 -DCMAKE_INSTALL_RPATH=$CONDA_PREFIX/lib:/usr/lib/x86_64-linux-gnu:/usr/lib/wsl/lib
 "
@@ -220,6 +220,19 @@ ffmpeg 7 依赖 libprotobuf 6，与 OpenCV 不兼容，因此增加了编译参�
 
 ffmpeg 7 使用了 GLIBC_2.35 及 GLIBCXX_3.4.30，因此即使安装了 `sysroot=2.28`，也无法将 Wheel 真正降到 `2_28`，最终落在 `2_35`。
 
-### 6.2 关于代理
+### 6.2 关于 `cv.cudacodec`
+
+编译时会自动侦测 Video Codec SDK 是否已安装。除了将头文件链接到正确的路径外，还需要让编译器侦测到“库”文件。
+
+- Ubuntu 主机上，库文件位于 `/usr/lib/x86_64-linux-gnu/` 目录，增加编译参数：`-DCMAKE_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu`。
+- WSL Ubuntu 上，库文件位于 `/usr/lib/wsl/lib/` 目录，增加编译参数：`-DCMAKE_LIBRARY_PATH=/usr/lib/wsl/lib`。
+
+### 6.3 关于代理
 
 在编译期间，需要从 `https://raw.githubusercontent.com` 下载一些模型文件，因此需要设置代理。
+
+### 6.4 关于 cp37-abi3
+
+由于 Numpy 不支持 `abi3`（稳定 ABI），因此官方建议对不同的 Python 版本编译不同的 wheel，而不是生成一个 abi3 wheel。
+
+可以修改 `environment.yaml` 中 Python 的版本，根据需要的编译不同的版本。
